@@ -47,14 +47,23 @@ class SimplexSolver:
                 self.tableau[r] -= self.tableau[r, col] * self.tableau[row]
 
     def _extract_results(self):
-        """Reads the final tableau to find variable values and Max Z."""
         var_values = np.zeros(self.n)
         for j in range(self.n):
             column = self.tableau[:-1, j]
-            # If column is a unit vector, variable is in the basis
             if np.sum(column == 1) == 1 and np.sum(column == 0) == self.m - 1:
                 row_idx = np.where(column == 1)[0][0]
                 var_values[j] = self.tableau[row_idx, -1]
         
         max_z = self.tableau[-1, -1]
-        return {"vars": var_values, "max_z": max_z, "tableau": self.tableau}
+        
+        # --- NEW: Extract Shadow Prices ---
+        # Shadow prices are in the Z-row under the slack variable columns
+        # Slack columns start after the decision variables (index n)
+        shadow_prices = self.tableau[-1, self.n : self.n + self.m]
+        
+        return {
+            "vars": var_values, 
+            "max_z": max_z, 
+            "tableau": self.tableau,
+            "shadow_prices": shadow_prices # <--- Added this
+        }

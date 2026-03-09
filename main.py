@@ -1,5 +1,6 @@
 import customtkinter as ctk
 import numpy as np
+from visualizer import plot_lpp
 from solver_engine import SimplexSolver
 # Set the look and feel
 ctk.set_appearance_mode("Dark") 
@@ -32,6 +33,7 @@ class LPPSolverApp(ctk.CTk):
         
         self.var_entry = ctk.CTkEntry(self.sidebar, width=60)
         self.var_entry.insert(0, "2") # Default 2 variables
+        self.var_entry.grid(row=4, column=0, padx=20, pady=5)
         self.var_entry.grid(row=4, column=0, padx=20, pady=5)
 
         self.con_label = ctk.CTkLabel(self.sidebar, text="Number of Constraints:")
@@ -74,6 +76,15 @@ class LPPSolverApp(ctk.CTk):
 
         self.vars_label = ctk.CTkLabel(self.results_frame, text="Variables: --", font=ctk.CTkFont(size=14))
         self.vars_label.pack(pady=10)
+        self.graph_btn = ctk.CTkButton(self.results_frame, text="Show 2D Graph", 
+                                       command=self.show_graph_event, fg_color="#e67e22")
+        
+    def show_graph_event(self):
+        c, A, b = self.get_user_data()
+        solver = SimplexSolver(c, A, b)
+        status, results = solver.solve()
+        if len(c) == 2:
+            plot_lpp(c, A, b, results)
 
     def view_steps_event(self):
         c, A, b = self.get_user_data()
@@ -87,29 +98,25 @@ class LPPSolverApp(ctk.CTk):
             self.show_tableau_popup(results)
 
     def solve_event(self):
-        # 1. Harvest Data
         c, A, b = self.get_user_data()
         if c is None: return 
         
-        # 2. Run Solver
         solver = SimplexSolver(c, A, b)
         status, results = solver.solve()
         
-        # 3. Update the GUI Results
         if status == "Optimal":
-            # Format the Max Z to 2 decimal places
-            self.z_label.configure(text=f"Max Z = {results['max_z']:.2f}")
-            
-            # Format Variables nicely: x1 = 2.00, x2 = 6.00
+            self.z_label.configure(text=f"Max Z = {results['max_z']:.2f}", text_color="#2ecc71")
             var_strings = [f"x{i+1} = {val:.2f}" for i, val in enumerate(results['vars'])]
             self.vars_label.configure(text=" | ".join(var_strings))
             
-            # Highlight the frame to show success
+            # --- NEW: Call Sensitivity UI ---
+            self.create_sensitivity_ui(results)
+            
             self.results_frame.configure(border_width=2, border_color="#2ecc71")
-        else:
-            self.z_label.configure(text="No Optimal Solution", text_color="#e74c3c")
-            self.vars_label.configure(text=f"Status: {status}")
-            self.results_frame.configure(border_width=2, border_color="#e74c3c")
+            if len(c) == 2:
+                self.graph_btn.pack(pady=10)
+            else:
+                self.graph_btn.pack_forget()
     
     def create_input_grid(self):
         # 1. Clear existing grid
@@ -231,6 +238,41 @@ class LPPSolverApp(ctk.CTk):
                 cell = ctk.CTkLabel(scroll_frame, text=val, text_color=text_col, 
                                    fg_color=bg_col, corner_radius=4, width=70)
                 cell.grid(row=i+1, column=j+1, padx=5, pady=5)  
+    
+    def create_sensitivity_ui(self, results):
+        # 1. Destroy old frame if it exists to refresh
+        if hasattr(self, 'sensitivity_frame'):
+            self.sensitivity_frame.destroy()
+
+        # 2. Create the new frame in the sidebar
+        self.sensitivity_frame = ctk.CTkFrame(self.sidebar, fg_color="#2b2b2b", corner_radius=10)
+        # Use a high row number to ensure it's at the bottom of the sidebar
+        self.sensitivity_frame.grid(row=10, column=0, padx=10, pady=20, sticky="ew")
+
+        ctk.CTkLabel(self.sensitivity_frame, text="SHADOW PRICES", 
+                     font=ctk.CTkFont(size=12, weight="bold"), text_color="#3498db").pack(pady=(10, 5))
+
+        # 3. Add sliders for each constraint
+        shadow_prices = results['shadow_prices']
+        for i, price in enumerate(shadow_prices):
+            text = f"Constraint {i+1}: ${price:.2f}/unit"
+            ctk.CTkLabel(self.sensitivity_frame, text=text, font=("Arial", 11)).pack(pady=2)
+            
+            # The Slider
+            slider = ctk.CTkSlider(self.sensitivity_frame, from_=-20, to=20, number_of_steps=40,
+                                   command=lambda val, idx=i: self.update_live_profit(val, idx, results))
+            slider.set(0) 
+            slider.pack(pady=(0, 10), padx=10)
+
+        # 4. FORCE Windows to redraw the sidebar
+        self.sidebar.update_idletasks()
+
+    def update_live_profit(self, change_val, constraint_idx, results):
+        # Formula: New Z = Old Z + (Shadow Price * Change in RHS)
+        shadow_price = results['shadow_prices'][constraint_idx]
+        new_z = results['max_z'] + (shadow_price * float(change_val))
+        
+        self.z_label.configure(text=f"Est. Z: {new_z:.2f}", text_color="#3498db")
 
 if __name__ == "__main__":
     app = LPPSolverApp()
