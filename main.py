@@ -50,6 +50,11 @@ class LPPSolverApp(ctk.CTk):
         self.step_btn = ctk.CTkButton(self.sidebar, text="Step-by-Step", fg_color="transparent", border_width=2)
         self.step_btn.grid(row=2, column=0, padx=20, pady=10)
 
+        # In __init__, update the button command:
+        self.step_btn.configure(command=self.view_steps_event)
+
+    
+
         # --- MAIN CONTENT AREA ---
         self.main_frame = ctk.CTkFrame(self, corner_radius=15)
         self.main_frame.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
@@ -70,7 +75,16 @@ class LPPSolverApp(ctk.CTk):
         self.vars_label = ctk.CTkLabel(self.results_frame, text="Variables: --", font=ctk.CTkFont(size=14))
         self.vars_label.pack(pady=10)
 
-
+    def view_steps_event(self):
+        c, A, b = self.get_user_data()
+        if c is None: return
+        
+        solver = SimplexSolver(c, A, b)
+        status, results = solver.solve()
+        
+        if status == "Optimal":
+            # Pass the full results dictionary now
+            self.show_tableau_popup(results)
 
     def solve_event(self):
         # 1. Harvest Data
@@ -160,6 +174,63 @@ class LPPSolverApp(ctk.CTk):
             # This triggers if a box is empty or contains a letter
             print("Error: Please enter valid numbers in all boxes.")
             return None, None, None
+        
+
+    def show_tableau_popup(self, results):
+        tableau = results['tableau']
+        rows, cols = tableau.shape
+        num_vars = len(results['vars'])
+        num_slacks = rows - 1 # Each constraint has a slack
+
+        popup = ctk.CTkToplevel(self)
+        popup.title("Final Simplex Tableau")
+        popup.geometry("850x500")
+        popup.attributes("-topmost", True)
+
+        # Main Header
+        title = ctk.CTkLabel(popup, text="OPTIMAL SIMPLEX TABLEAU", font=ctk.CTkFont(size=18, weight="bold"))
+        title.pack(pady=10)
+
+        scroll_frame = ctk.CTkScrollableFrame(popup, width=800, height=400)
+        scroll_frame.pack(padx=20, pady=20, fill="both", expand=True)
+
+        # 1. GENERATE HEADERS (x1, x2... s1, s2... RHS)
+        headers = [f"x{i+1}" for i in range(num_vars)] + \
+                  [f"s{i+1}" for i in range(num_slacks)] + \
+                  ["RHS"]
+        
+        # Empty corner label
+        ctk.CTkLabel(scroll_frame, text="Basis", font=("Arial", 12, "bold"), text_color="#3498db").grid(row=0, column=0, padx=10, pady=5)
+
+        for j, h in enumerate(headers):
+            lbl = ctk.CTkLabel(scroll_frame, text=h, font=("Arial", 12, "bold"), text_color="#3498db")
+            lbl.grid(row=0, column=j+1, padx=10, pady=5)
+
+        # 2. GENERATE ROWS
+        for i in range(rows):
+            # Row Label (Basic Variable or Z)
+            row_name = f"Row {i+1}" if i < rows-1 else "Z-Row"
+            ctk.CTkLabel(scroll_frame, text=row_name, font=("Arial", 11, "italic")).grid(row=i+1, column=0, padx=10, pady=5)
+
+            for j in range(cols):
+                val = f"{tableau[i, j]:.2f}"
+                
+                # Logic for cell styling
+                is_z_row = (i == rows - 1)
+                is_rhs_col = (j == cols - 1)
+                
+                # Default style
+                text_col = "white"
+                bg_col = "transparent"
+                
+                if is_z_row:
+                    text_col = "#2ecc71" # Green for the final objective row
+                if is_rhs_col:
+                    bg_col = "#2c3e50" # Darker background for RHS
+                
+                cell = ctk.CTkLabel(scroll_frame, text=val, text_color=text_col, 
+                                   fg_color=bg_col, corner_radius=4, width=70)
+                cell.grid(row=i+1, column=j+1, padx=5, pady=5)  
 
 if __name__ == "__main__":
     app = LPPSolverApp()
