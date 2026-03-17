@@ -2,14 +2,14 @@ import numpy as np
 
 class SimplexSolver:
     def __init__(self, c, A, b):
-        self.c = c  # Objective coefficients
-        self.A = A  # Constraint matrix
-        self.b = b  # RHS values
+        self.c = c  
+        self.A = A  
+        self.b = b  
         self.m, self.n = A.shape
         
-        # Build the Initial Tableau
-        # [ A | I | b ]
-        # [ -c| 0 | 0 ]
+        
+        
+        
         self.tableau = np.zeros((self.m + 1, self.n + self.m + 1))
         self.tableau[:self.m, :self.n] = self.A
         self.tableau[:self.m, self.n:self.n + self.m] = np.eye(self.m)
@@ -19,12 +19,12 @@ class SimplexSolver:
     def solve(self):
         """Standard Simplex iteration loop."""
         while np.any(self.tableau[-1, :-1] < 0):
-            # 1. Identify Pivot Column (Entering Variable)
+            
             pivot_col = np.argmin(self.tableau[-1, :-1])
             
-            # 2. Identify Pivot Row (Leaving Variable) using Ratio Test
+            
             ratios = self.tableau[:-1, -1] / self.tableau[:-1, pivot_col]
-            # Replace non-positive ratios with infinity to ignore them
+            
             ratios[self.tableau[:-1, pivot_col] <= 0] = np.inf
             
             if np.all(ratios == np.inf):
@@ -32,10 +32,10 @@ class SimplexSolver:
             
             pivot_row = np.argmin(ratios)
             
-            # 3. Perform Pivoting (Row Operations)
+            
             self._pivot(pivot_row, pivot_col)
             
-        # 4. Extract Results
+        
         results = self._extract_results()
         return "Optimal", results
 
@@ -56,14 +56,14 @@ class SimplexSolver:
         
         max_z = self.tableau[-1, -1]
         
-        # --- NEW: Extract Shadow Prices ---
-        # Shadow prices are in the Z-row under the slack variable columns
-        # Slack columns start after the decision variables (index n)
-        shadow_prices = self.tableau[-1, self.n : self.n + self.m]
+        
+        
+        
+        shadow_prices = -self.tableau[-1, self.n : self.n + self.m]
         
         return {
             "vars": var_values, 
             "max_z": max_z, 
             "tableau": self.tableau,
-            "shadow_prices": shadow_prices # <--- Added this
+            "shadow_prices": shadow_prices 
         }
