@@ -102,6 +102,8 @@ class LPPSolverApp(ctk.CTk):
         
         solver = SimplexSolver(c, A, b, constraint_types)
         status, results = solver.solve()
+
+        print("FINAL RESULTS:", results)  # DEBUG
         
         if status == "Optimal":
             self.z_label.configure(text=f"Max Z = {results['max_z']:.2f}", text_color="#2ecc71")
@@ -116,6 +118,13 @@ class LPPSolverApp(ctk.CTk):
                 self.graph_btn.pack(pady=10)
             else:
                 self.graph_btn.pack_forget()
+        elif status == "Infeasible":
+            self.z_label.configure(text="Infeasible Problem", text_color="#e74c3c")
+            self.vars_label.configure(text="No feasible solution")
+
+        elif status == "Unbounded":
+            self.z_label.configure(text="Unbounded Solution", text_color="#f39c12")
+            self.vars_label.configure(text="Objective can increase indefinitely")
     
     def create_input_grid(self):
         
