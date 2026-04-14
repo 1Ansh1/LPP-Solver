@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot_lpp(c, A, b, results):
+def plot_lpp(c, A, b, results): 
     plt.figure(figsize=(6, 5))
     
     

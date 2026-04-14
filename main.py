@@ -79,17 +79,17 @@ class LPPSolverApp(ctk.CTk):
                                        command=self.show_graph_event, fg_color="#e67e22")
         
     def show_graph_event(self):
-        c, A, b = self.get_user_data()
-        solver = SimplexSolver(c, A, b)
+        c, A, b, constraint_types = self.get_user_data()
+        solver = SimplexSolver(c, A, b, constraint_types)
         status, results = solver.solve()
         if len(c) == 2:
             plot_lpp(c, A, b, results)
 
     def view_steps_event(self):
-        c, A, b = self.get_user_data()
+        c, A, b, constraint_types = self.get_user_data()
         if c is None: return
         
-        solver = SimplexSolver(c, A, b)
+        solver = SimplexSolver(c, A, b, constraint_types)
         status, results = solver.solve()
         
         if status == "Optimal":
@@ -97,10 +97,10 @@ class LPPSolverApp(ctk.CTk):
             self.show_tableau_popup(results)
 
     def solve_event(self):
-        c, A, b = self.get_user_data()
+        c, A, b, constraint_types = self.get_user_data()
         if c is None: return 
         
-        solver = SimplexSolver(c, A, b)
+        solver = SimplexSolver(c, A, b, constraint_types)
         status, results = solver.solve()
         
         if status == "Optimal":
@@ -119,6 +119,7 @@ class LPPSolverApp(ctk.CTk):
     
     def create_input_grid(self):
         
+        self.constraint_types = []
         for widget in self.main_frame.winfo_children():
             widget.destroy()
 
@@ -135,15 +136,44 @@ class LPPSolverApp(ctk.CTk):
         for j in range(num_vars):
             lbl = ctk.CTkLabel(self.main_frame, text=f"x{j+1}", font=("Arial", 12, "bold"))
             lbl.grid(row=0, column=j, padx=5, pady=5)
-        ctk.CTkLabel(self.main_frame, text="RHS", font=("Arial", 12, "bold")).grid(row=0, column=num_vars, padx=5, pady=5)
-
+        ctk.CTkLabel(self.main_frame, text="Type", font=("Arial", 12, "bold")).grid(row=0, column=num_vars, padx=5)
+        ctk.CTkLabel(self.main_frame, text="RHS", font=("Arial", 12, "bold")).grid(row=0, column=num_vars+1, padx=5)
        
+        # for i in range(num_cons):
+        #     row_entries = []
+        #     for j in range(num_vars + 1): 
+        #         entry = ctk.CTkEntry(self.main_frame, width=60)
+        #         entry.grid(row=i+1, column=j, padx=2, pady=2)
+        #         row_entries.append(entry)
+        #     self.entries.append(row_entries)
+
+
         for i in range(num_cons):
             row_entries = []
-            for j in range(num_vars + 1): 
+            
+            # Coefficient inputs
+            for j in range(num_vars):
                 entry = ctk.CTkEntry(self.main_frame, width=60)
                 entry.grid(row=i+1, column=j, padx=2, pady=2)
                 row_entries.append(entry)
+            
+            # Constraint type dropdown
+            dropdown = ctk.CTkOptionMenu(
+                self.main_frame,
+                values=["<=", ">=", "="],
+                width=70
+            )
+            dropdown.set("<=")  # default
+            dropdown.grid(row=i+1, column=num_vars, padx=5, pady=2)
+            
+            self.constraint_types.append(dropdown)
+            
+            # RHS entry
+            rhs_entry = ctk.CTkEntry(self.main_frame, width=60)
+            rhs_entry.grid(row=i+1, column=num_vars + 1, padx=2, pady=2)
+            
+            row_entries.append(rhs_entry)
+            
             self.entries.append(row_entries)
             
       
@@ -173,13 +203,13 @@ class LPPSolverApp(ctk.CTk):
                 
                 
                 rhs_b.append(float(row[-1].get()))
-                
-            return np.array(obj_coeffs), np.array(matrix_A), np.array(rhs_b)
+            constraint_types = [dropdown.get() for dropdown in self.constraint_types]    
+            return np.array(obj_coeffs), np.array(matrix_A), np.array(rhs_b), constraint_types 
             
         except ValueError:
            
             print("Error: Please enter valid numbers in all boxes.")
-            return None, None, None
+            return None, None, None, None
         
 
     def show_tableau_popup(self, results):

@@ -1,12 +1,12 @@
 import numpy as np
 
 class SimplexSolver:
-    def __init__(self, c, A, b):
+    def __init__(self, c, A, b, constraint_types):
         self.c = c  
         self.A = A  
         self.b = b  
         self.m, self.n = A.shape
-        
+        self.constraint_types = constraint_types
         
         
         
@@ -17,7 +17,6 @@ class SimplexSolver:
         self.tableau[-1, :self.n] = -self.c
 
     def solve(self):
-        """Standard Simplex iteration loop."""
         while np.any(self.tableau[-1, :-1] < 0):
             
             pivot_col = np.argmin(self.tableau[-1, :-1])
