@@ -12,8 +12,18 @@ class SimplexSolver:
        # Step 1: Count slack and artificial variables
         self.num_slack = 0
         self.num_artificial = 0
+        # 🔴 FIX RHS BEFORE building tableau
+        for i in range(self.m):
+            if self.b[i] < 0:
+                self.b[i] *= -1
+                self.A[i] *= -1   # 🔴 THIS WAS MISSING
 
-        for t in constraint_types:
+                if self.constraint_types[i] == "<=":
+                    self.constraint_types[i] = ">="
+                elif self.constraint_types[i] == ">=":
+                    self.constraint_types[i] = "<="
+
+        for t in self.constraint_types:
             if t == "<=":
                 self.num_slack += 1
             elif t == ">=":
@@ -38,11 +48,11 @@ class SimplexSolver:
             # Original variables
             self.tableau[i, :self.n] = self.A[i]
 
-            if constraint_types[i] == "<=":
+            if self.constraint_types[i] == "<=":
                 self.tableau[i, slack_idx] = 1
                 slack_idx += 1
 
-            elif constraint_types[i] == ">=":
+            elif self.constraint_types[i] == ">=":
                 self.tableau[i, slack_idx] = -1
                 slack_idx += 1
 
@@ -50,13 +60,17 @@ class SimplexSolver:
                 self.artificial_cols.append(artificial_idx)
                 artificial_idx += 1
 
-            elif constraint_types[i] == "=":
+            elif self.constraint_types[i] == "=":
                 self.tableau[i, artificial_idx] = 1
                 self.artificial_cols.append(artificial_idx)
                 artificial_idx += 1
 
             # RHS
             self.tableau[i, -1] = self.b[i]
+            # 🔴 FINAL GUARANTEE: RHS must be non-negative
+            if self.tableau[i, -1] < 0:
+                self.tableau[i, :] *= -1
+
 
         # Step 5: Phase 1 objective (minimize artificial variables)
         for col in self.artificial_cols:
@@ -64,7 +78,7 @@ class SimplexSolver:
 
         # Step 6: Make tableau consistent
         for i in range(self.m):
-            if constraint_types[i] in [">=", "="]:
+            if self.constraint_types[i] in [">=", "="]:
                 self.tableau[-1] -= self.tableau[i]
         
         
@@ -81,26 +95,28 @@ class SimplexSolver:
             if len(neg_indices) == 0:
                 break
             
-            pivot_col = None
-            
-            for col_idx in neg_indices:
-                col = self.tableau[:-1, col_idx]
-                rhs = self.tableau[:-1, -1]
-                
-                with np.errstate(divide='ignore'):
-                    ratios = np.where(col > 1e-8, rhs / col, np.inf)
-                
-                if not np.all(ratios == np.inf):
-                    pivot_col = col_idx
-                    break
-            
-            # 🔴 CRITICAL: no valid pivot → stop
-            if pivot_col is None:
-                break
+            # Step 1: Choose entering variable (most negative)
+            pivot_col = np.argmin(z_row)
+
+            # Step 2: Get column
+            col = self.tableau[:-1, pivot_col]
+            rhs = self.tableau[:-1, -1]
+
+            # Step 3: Check unbounded
+            if np.all(col <= 1e-8):
+                return "Unbounded"
+
+            # Step 4: Ratio test
+            with np.errstate(divide='ignore'):
+                ratios = np.where(col > 1e-8, rhs / col, np.inf)
+
+            pivot_row = np.argmin(ratios)
             
             col = self.tableau[:-1, pivot_col]
             rhs = self.tableau[:-1, -1]
-            
+            if np.all(col <= 1e-8):
+                return "Unbounded"
+
             with np.errstate(divide='ignore'):
                 ratios = np.where(col > 1e-8, rhs / col, np.inf)
             
@@ -112,7 +128,9 @@ class SimplexSolver:
 
     def solve(self):
         # -------- Phase 1 --------
-        self._simplex()
+        status = self._simplex()
+        if status == "Unbounded":
+            return "Unbounded", None
         
         if abs(self.tableau[-1, -1]) > 1e-5:
             return "Infeasible", None
@@ -122,9 +140,23 @@ class SimplexSolver:
         
         self._restore_basis()
         # -------- Phase 2 setup --------
+       # -------- Phase 2 setup --------
         self._set_original_objective()
-        
+
         print("After Phase 2 setup:\n", self.tableau)
+
+        # If NO artificial variables → directly run simplex
+        if len(self.artificial_cols) == 0:
+            status = self._simplex()
+            if status == "Unbounded":
+                return "Unbounded", None
+        else:
+            # Only run if truly needed (your previous fix)
+            z_row = self.tableau[-1, :-1]
+            if np.any(z_row < -1e-8):
+                status = self._simplex()
+            if status == "Unbounded":
+                return "Unbounded", None
         
         # -------- Phase 2 solve --------
 
@@ -150,7 +182,6 @@ class SimplexSolver:
                 row_idx = np.where(column == 1)[0][0]
                 var_values[j] = self.tableau[row_idx, -1]
         
-        # ✅ Correct Z computation
         max_z = np.dot(self.c, var_values)
         
         shadow_prices = -self.tableau[-1, self.n : self.n + self.m]
