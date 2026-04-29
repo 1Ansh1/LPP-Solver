@@ -81,29 +81,39 @@ class LPPSolverApp(ctk.CTk):
     def show_graph_event(self):
         c, A, b, constraint_types = self.get_user_data()
         solver = SimplexSolver(c, A, b, constraint_types)
-        status, results = solver.solve()
+        status, results, _ = solver.solve()
         if len(c) == 2:
             plot_lpp(c, A, b, results)
 
     def view_steps_event(self):
-        c, A, b, constraint_types = self.get_user_data()
-        if c is None: return
-        
-        solver = SimplexSolver(c, A, b, constraint_types)
-        status, results = solver.solve()
-        
-        if status == "Optimal":
-           
-            self.show_tableau_popup(results)
+        if not hasattr(self, "steps") or not self.steps:
+            print("No steps available. Solve first.")
+            return
+
+        self.show_steps_popup(self.steps)
+
+
+    def step_event(self):
+        if not hasattr(self, "steps") or not self.steps:
+            print("No steps available. Solve first.")
+            return
+
+        for i, step in enumerate(self.steps):
+            print(f"\nStep {i+1} ({step['phase']}):")
+            print(step["tableau"])
+
+            if step["pivot_row"] is not None:
+                print(f"Pivot -> Row: {step['pivot_row']}, Col: {step['pivot_col']}")
 
     def solve_event(self):
         c, A, b, constraint_types = self.get_user_data()
         if c is None: return 
         
         solver = SimplexSolver(c, A, b, constraint_types)
-        status, results = solver.solve()
+        status, results, steps = solver.solve()
+        self.steps = steps
 
-        print("FINAL RESULTS:", results)  # DEBUG
+        print("FINAL RESULTS:", results)  
         
         if status == "Optimal":
             self.z_label.configure(text=f"Max Z = {results['max_z']:.2f}", text_color="#2ecc71")
@@ -148,36 +158,28 @@ class LPPSolverApp(ctk.CTk):
         ctk.CTkLabel(self.main_frame, text="Type", font=("Arial", 12, "bold")).grid(row=0, column=num_vars, padx=5)
         ctk.CTkLabel(self.main_frame, text="RHS", font=("Arial", 12, "bold")).grid(row=0, column=num_vars+1, padx=5)
        
-        # for i in range(num_cons):
-        #     row_entries = []
-        #     for j in range(num_vars + 1): 
-        #         entry = ctk.CTkEntry(self.main_frame, width=60)
-        #         entry.grid(row=i+1, column=j, padx=2, pady=2)
-        #         row_entries.append(entry)
-        #     self.entries.append(row_entries)
-
 
         for i in range(num_cons):
             row_entries = []
             
-            # Coefficient inputs
+        
             for j in range(num_vars):
                 entry = ctk.CTkEntry(self.main_frame, width=60)
                 entry.grid(row=i+1, column=j, padx=2, pady=2)
                 row_entries.append(entry)
             
-            # Constraint type dropdown
+           
             dropdown = ctk.CTkOptionMenu(
                 self.main_frame,
                 values=["<=", ">=", "="],
                 width=70
             )
-            dropdown.set("<=")  # default
+            dropdown.set("<=")  
             dropdown.grid(row=i+1, column=num_vars, padx=5, pady=2)
             
             self.constraint_types.append(dropdown)
             
-            # RHS entry
+         
             rhs_entry = ctk.CTkEntry(self.main_frame, width=60)
             rhs_entry.grid(row=i+1, column=num_vars + 1, padx=2, pady=2)
             
@@ -277,6 +279,61 @@ class LPPSolverApp(ctk.CTk):
                                    fg_color=bg_col, corner_radius=4, width=70)
                 cell.grid(row=i+1, column=j+1, padx=5, pady=5)  
     
+    def show_steps_popup(self, steps):
+        popup = ctk.CTkToplevel(self)
+        popup.title("Simplex Step-by-Step")
+        popup.geometry("900x600")
+        popup.attributes("-topmost", True)
+
+        title = ctk.CTkLabel(popup, text="SIMPLEX STEP-BY-STEP", 
+                            font=ctk.CTkFont(size=18, weight="bold"))
+        title.pack(pady=10)
+
+        scroll_frame = ctk.CTkScrollableFrame(popup, width=850, height=500)
+        scroll_frame.pack(padx=20, pady=20, fill="both", expand=True)
+
+        row_offset = 0
+
+        for step_idx, step in enumerate(steps):
+            tableau = step["tableau"]
+            rows, cols = tableau.shape
+
+        
+            step_title = f"Step {step_idx+1} ({step['phase']})"
+            ctk.CTkLabel(scroll_frame, text=step_title, 
+                        font=("Arial", 14, "bold"),
+                        text_color="#3498db").grid(row=row_offset, column=0, columnspan=cols+1, pady=(10, 5))
+
+            row_offset += 1
+
+          
+            for i in range(rows):
+                for j in range(cols):
+                    val = f"{tableau[i, j]:.2f}"
+
+                    is_z_row = (i == rows - 1)
+
+                    text_col = "#2ecc71" if is_z_row else "white"
+
+                    cell = ctk.CTkLabel(scroll_frame, text=val,
+                                        text_color=text_col,
+                                        fg_color="#2c3e50" if j == cols-1 else "transparent",
+                                        width=70, corner_radius=4)
+
+                    cell.grid(row=row_offset + i, column=j, padx=5, pady=5)
+
+            row_offset += rows
+
+        
+            if step["pivot_row"] is not None:
+                pivot_text = f"Pivot → Row {step['pivot_row']}, Col {step['pivot_col']}"
+                ctk.CTkLabel(scroll_frame, text=pivot_text,
+                            font=("Arial", 11, "italic"),
+                            text_color="#f39c12").grid(row=row_offset, column=0, columnspan=cols, pady=(5, 10))
+                row_offset += 1
+
+            row_offset += 1 
+
     def create_sensitivity_ui(self, results):
      
         if hasattr(self, 'sensitivity_frame'):
